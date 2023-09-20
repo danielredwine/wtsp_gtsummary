@@ -272,7 +272,7 @@ p4_ancova_table <- feather_clean%>%
     update = list(
       label ~ '',
       stat_1 ~ '**Basic**(N=19)', #is markdown **bold** formatting, markdown is default formatting for this
-      stat_2 ~ '**Juvenile**(N=19)')) # **Bold**, *italics*, may also be able to use underscores 
+      stat_2 ~ '**Juvenile**(N=117)')) # **Bold**, *italics*, may also be able to use underscores 
 
 
 
