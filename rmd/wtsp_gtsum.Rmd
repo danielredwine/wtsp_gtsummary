@@ -100,7 +100,7 @@ table_wtsp_summary <-
       PCRMorph ~ "Morph",
       P4Mass ~ "Mass (mg)",
       P4Length ~ "Length (mm)")) %>%
-  modify_caption("Table 1. Summary of White-throated Sparrow P4 characteristics") %>% # Adding a table header
+  modify_caption("Table 1. Summary characteristics and counts of White-throated Sparrow P4 feathers sampled") %>% # Adding a table header
   modify_header(
     update = list(
       label ~ '',
@@ -232,18 +232,72 @@ stat_4 ~ '**SY**',
 table_ANOVA_wtsp
  
 ```
-```{r}
-feather_boxplot <- ggplot(feather_clean, aes(x = Age, y = Wing, fill = Age)) +
+```{r Age ANOVA Violin, message=FALSE, echo=FALSE, fig.show = "hold", out.width = "50%", fig.align = "center", fig.cap="Figure 3. Comparison of P4 mass for different age categories of White-throated Sparrow"}
+
+boxplot_age_p4mass <- ggplot(feather_clean, aes(x = Age, y = P4Mass, fill = Age)) +
   geom_boxplot() +
   theme_bw() +
   xlab("Age")+
-  ylab("Wing Chord Length (mm)")
+  ylab("P4Mass (mg)")+
+  theme(legend.position  = "none") +
+  scale_fill_brewer(palette = "Paired")
 
-ggsave("output/wing_box.png")
+boxplot_age_p4mass
+
+ggsave("../output/boxplot_age_p4mass.png")
 
 ```
 
 # ANCOVA
 
-For the ANOVA we will group by age categories for the purpose of this assignment. These age categories may not represent an ecologically significant effect as HY birds become classified as SY birds after January 1.
+For the Ancova we will be investigating the response variable of P4 mass based on predictors of P4 feather length and P4 feather generation. This should remove the effect length has on mass so that we may better understand how feather generation affects the mass of a White-throated Sparrow Feather.
+
+```{r ANCOVA table, message=FALSE, warning=FALSE, echo=FALSE}
+#ANCOVA P4 weight adjusted for P4 length covariate
+#categorical and continuous predictor 
+
+p4_ancova_table <- feather_clean%>% 
+  select(P4Mass,P4Length,Fgen,Wing)%>%
+  tbl_summary(by=Fgen, 
+              digits = all_continuous() ~ 1,
+              include= c(P4Mass, Wing),
+              label = list(
+      P4Mass ~ "P4 Mass (mg)",
+      Wing ~ "Wing Chord (mm)"
+    )) %>%
+  add_difference(adj.vars=c(P4Length)) %>% #this one line turns it from an ANOVA to an ANCOVA
+  modify_caption("Table 4. Comparison of juvenile and basic P4 mass (mg) adjusted for P4 length (mm). An ANCOVA was used to adjust means and generate summary statistics") %>%
+  modify_footnote(everything() ~ NA) %>%  # this is how you remove the stuff that pops up at the bottom, sub/superscript
+ modify_header(
+    update = list(
+      label ~ '',
+      stat_1 ~ '**Basic**(N=19)', #is markdown **bold** formatting, markdown is default formatting for this
+      stat_2 ~ '**Juvenile**(N=19)')) # **Bold**, *italics*, may also be able to use underscores 
+
+
+
+p4_ancova_table
+
+```
+```{r feather Ancovaplot, message=FALSE, echo=FALSE, warning=FALSE, fig.show = "hold", out.width = "50%", fig.align = "center", fig.cap="Figure 4. Regression of feather mass and length for juvenile and basic P4 feathers"}
+
+p4_model <- lm(P4Mass ~ P4Length + Fgen, data=feather_clean)
+
+#make ANCOVA from a fit model; one of many ways to do this.
+p4_model_fortify <- fortify(p4_model)
+
+ancova_plot_p4 <- ggplot(p4_model_fortify) +
+  geom_point(aes(x = P4Length, y = P4Mass, color = Fgen)) +
+  geom_line(aes(x = P4Length, y = .fitted, color = Fgen)) +
+  geom_vline(xintercept=mean(feather_clean$P4Length), linetype='dashed', color='blue', size=0.5)+
+    ylab("P4 Mass (mg)") +
+  xlab("P4 Length (mm)") +
+  scale_fill_discrete(name = "Feather Generation", labels = c("Basic", "Juvenile"))
+    
+
+ancova_plot_p4
+  
+ggsave("../output/regression_p4_ancova.png")
+
+```
 
