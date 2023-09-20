@@ -1,0 +1,249 @@
+---
+title: "Differences in Juvenile and Basic White-throated Sparrow Primaries"
+author: "Daniel Redwine"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 1  # up to one depth of headings, no subheader (specified by # in html)
+    number_sections: false  ## if you want number sections at each table header
+    theme: united  # many options for theme
+---
+```{r setup, echo=FALSE, warning=FALSE, include = FALSE}
+knitr::opts_chunk$set(fig.asp = .66, fig.width = 5)
+#Its common to have a setup area to help keep track of required packages and formatting options
+
+library(tidyverse)  #importing, tidying, plotting data
+library(knitr)      #making tables
+library(leaflet)
+library(dplyr)
+library(hexbin)
+library(ggplot2)
+library(readr)
+library(RColorBrewer)
+library(ggfortify)
+library(emmeans)
+library(multcomp)
+library(multcompView)
+library(tidyr)
+library(gridExtra)
+library(gtsummary)
+library(gt)
+library(flextable)
+library(ggplot2)
+
+#knitr::opts_chunk$set(fig.width = 5, fig.asp = 1/3) #force figures to be a certain size and aspect ratio
+#opts_chunk$set(echo=FALSE)   #can force hide all code in the output; disables 'code folding'
+```
+# White-Throated Sparrow Feathers
+
+Traditionally juvenile birds grow all their feathers in the nest over a short time period while adult birds incrementally molt their feathers over a longer time period. Therefore, there may be different energetic demands which mediate differences in composition of feathers between adult and juvenile birds. White-throated Sparrows are a polymorphic species, so there may also be differences between sex and morph. Here we perform a t-test, two-way ANOVA, and ANCOVA to investigate differences between basic and juvenile White-throated Sparrow P4 feathers, as well as other morphometric features. More information on White-throated Sparrows can be found [here](https://www.allaboutbirds.org/guide/White-throated_Sparrow/overview).
+
+```{r feather photos, echo=FALSE, fig.show = "hold", out.width = "50%", fig.align = "default", fig.cap="Figure 1. Open wing primaries of a basic plumage (left) and juvenile plumage (right) White-throated Sparrow"}
+## echo=FALSE ensures that the code does not show in the final knit product
+## out.width is for width of the figures, fig.align default places them next to eachother
+## fig.cap adds a caption to the figure
+
+knitr::include_graphics("../images/w36_basic.png") ## To include the first figure
+knitr::include_graphics("../images/w37_juv.png") ## To include the second figure
+
+
+```
+
+```{r load and clean data, echo=FALSE, message=FALSE}
+
+wtsp_data <- read.csv("../data/wtsp_data.csv") #load in dataset, .. moves up one level
+feather_clean <- wtsp_data %>%
+  dplyr::filter(New.Recap == "N") %>% 
+  # Using dplyr::filter because multiple packages have a filter command
+  # Remove recaps so no repeated measures which would violate assumptions for stats
+  dplyr::select(SampleID, PCRsex, PCRMorph, Age, P4Mass, P4Length, Fgen, Wing, Tail) %>%
+  # Selecting only the variables or column headers that I want to use
+  dplyr::filter(Fgen == "J" | Fgen == "B") %>% #Only want J or B in Fgen, gets rid of blank/x
+  dplyr::filter(PCRsex == "M" | PCRsex == "F") %>% # Only want M/F, | is operator for or
+  dplyr::filter(PCRMorph == "WS" | PCRMorph =="TS") %>%
+  dplyr::filter(Age == "HY" | Age == "AHY" | Age == "SY" | Age == "ASY") %>%
+  dplyr::filter(str_detect(Tail,"^\\s*[0-9]*\\s*$")) %>% # This removes any non numeric?
+  dplyr::mutate(P4Mass = P4Mass *1000) # convert P4Mass to mg
+
+# Now I have only the needed columns without any blanks, x, or NA 
+
+  feather_clean$PCRsex <- as.factor(feather_clean$PCRsex) #Making sure factors are factors
+  feather_clean$PCRMorph <- as.factor(feather_clean$PCRMorph)
+  feather_clean$Fgen <- as.factor(feather_clean$Fgen) 
+  feather_clean$P4Mass <- as.numeric(feather_clean$P4Mass) #Making sure values are numeric
+  feather_clean$P4Length <- as.numeric(feather_clean$P4Length)
+  feather_clean$Wing <- as.numeric(feather_clean$Wing)
+  feather_clean$Tail <- as.numeric(feather_clean$Tail)
+
+## Needed to clean up the data. Removed all instances of blank or undesired characters in the dataset, changed variables to factors or numeric
+```
+# Welch Two Sample T-test
+
+First we will create a gtsummary table which performs a Welch two sample t-test comparing mean P4 mass (g), P4 length (mm), wing chord length (mm), and tail length (mm) for birds with juvenile and basic P4 feathers. Note that the categories for juvenile and basic only refer to P4 and are not a meaningful category for wing chord and tail length, and are only included for the purpose of this assignment. 
+
+```{r T-test, echo=FALSE, message=FALSE}
+
+theme_gtsummary_mean_sd(set_theme = TRUE)
+#Sets default summary statistics to mean and standard deviation in tbl_summary()
+#Sets default continuous tests in add_p() to t-test and ANOVA
+
+# summarize the data; summary includes all species, so not that helpful yet
+table_wtsp_summary <- 
+  feather_clean %>%
+  tbl_summary(by=Fgen,
+              missing = "no", #gets rid of pesky NAs
+              digits = all_continuous() ~ 1, #set number of digits
+              include = c(PCRsex, PCRMorph, P4Mass, P4Length),
+              label = list(
+      PCRsex ~ "Sex",
+      PCRMorph ~ "Morph",
+      P4Mass ~ "Mass (mg)",
+      P4Length ~ "Length (mm)")) %>%
+  modify_caption("Table 1. Summary of White-throated Sparrow P4 characteristics") %>% # Adding a table header
+  modify_header(
+    update = list(
+      label ~ '',
+      stat_1 ~ '**Basic**', #is markdown **bold** formatting, markdown is default formatting for this
+      stat_2 ~ '**Juvenile**' # **Bold**, *italics*, may also be able to use underscores 
+      )
+  ) %>%
+  modify_footnote(everything() ~ NA) # this is how you remove the stuff that pops up at the bottom, sub/superscript
+  
+table_wtsp_summary #load the object
+
+table_wtsp_summary %>%
+  as_flex_table() %>%
+  flextable::save_as_docx(path = "../output/table_wtsp_summary.docx")
+# Converted this to a flex table which allows it to be saved as an image
+
+table_t_test_wtsp <- feather_clean %>%
+  gtsummary::select(Fgen, P4Mass, P4Length, Wing, Tail) %>% 
+  tbl_summary(
+    by = Fgen, # Creates the columns by feather generation
+    missing = "no",
+    # remove missing values (NAs). "ifany" will include a missing values row in table.
+    digits = all_continuous() ~ 1, 
+    #number of displayed digits for continuous variables, one significant digit
+    label = list(
+      P4Mass ~ "P4 Mass (mg)",
+      P4Length ~ "P4 Length (mm)",
+      Wing ~ "Wing Chord (mm)",
+      Tail ~ "Tail Length (mm)"
+    ), # labels including units, making it look pretty 
+    statistic = list(all_continuous() ~ "{mean} ({sd})", #can use any character for parentheses
+                     all_categorical() ~ "{n}") #count obs. for categorical variables
+  ) %>% 
+  add_p(pvalue_fun = ~ style_pvalue(.x, digits = 2)) %>% #number of digits displayed for p-values
+  modify_caption("Table 2. Mean (sd) values of morphological characteristics for White-throated Sparrows with either juvenile or basic P4 feathers. A Welch two sample t-test was used to generate the P-value for each characteristic") %>% # Adding a table header
+  modify_header(
+    update = list(
+      label ~ '',
+      stat_1 ~ '**Basic**', #is markdown **bold** formatting, markdown is default formatting for this
+      stat_2 ~ '**Juvenile**', # **Bold**, *italics*, may also be able to use underscores 
+      p.value ~ '**P-value**')
+  ) %>%
+  modify_footnote(everything() ~ NA)  # this is how you remove the stuff that pops up at the bottom, sub/superscript
+  
+table_t_test_wtsp # load the object
+
+table_t_test_wtsp %>%
+  as_flex_table() %>%
+  flextable::save_as_docx(path = "../output/table_t_test_wtsp.docx")
+# Converted this to a flex table which allows it to be saved as a doc
+
+
+```
+```{r P4 t-test bar graph, message=FALSE, echo=FALSE, fig.show = "hold", out.width = "50%", fig.align = "default", fig.cap="Figure 2. Comparison of mass (left) and length (right) for both juvenile and basic P4 feathers"}
+
+# Bar chart time, first summary of feather mass
+feather_mass_sum <- feather_clean %>%
+  group_by(Fgen) %>%
+  summarize(mean_p4mass = mean(P4Mass), se_p4mass = sd(P4Mass)/sqrt(n()))
+
+# Now make the bar chart
+fig_p4_mass_bar <- ggplot(feather_mass_sum, aes(x = Fgen, y = mean_p4mass, fill = Fgen)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.5) +
+  scale_x_discrete(labels=c("B" = "Basic", "J" = "Juvenile")) +
+  ylab("P4 Mass (mg)") +
+  xlab("Feather Generation") +
+  geom_errorbar(aes(ymin = mean_p4mass - se_p4mass, ymax = mean_p4mass + se_p4mass, width =    0.2), position = position_dodge(width = 0.9)) +
+  theme_bw() +
+  theme(legend.position  = "none") +
+  scale_fill_brewer(palette = "Paired")
+  
+ggsave("../output/fig_p4_mass_bar.png")
+
+feather_length_sum <- feather_clean %>%
+  group_by(Fgen) %>%
+  summarize(mean_p4length = mean(P4Length), se_p4length = sd(P4Length)/sqrt(n()))
+
+# Now make the bar chart
+fig_p4_length_bar <- ggplot(feather_length_sum, aes(x = Fgen, y = mean_p4length, fill = Fgen)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.5) +
+  scale_x_discrete(labels=c("B" = "Basic", "J" = "Juvenile")) +
+  ylab("P4 Length (mm)") +
+  xlab("Feather Generation") +
+  geom_errorbar(aes(ymin = mean_p4length - se_p4length, ymax = mean_p4length + se_p4length, width =    0.2), position = position_dodge(width = 0.9)) +
+  theme_bw() +
+  theme(legend.position  = "none") +
+  scale_fill_brewer(palette = "Paired")
+
+ggsave("../output/fig_p4_length_bar.png")
+
+knitr::include_graphics("../output/fig_p4_mass_bar.png") ## To include the first figure
+knitr::include_graphics("../output/fig_p4_length_bar.png") ## To include the second figure
+```
+# ANOVA
+
+For the ANOVA we will group by age categories for the purpose of this assignment. These age categories may not represent an ecologically significant category as HY birds become classified as SY birds after January 1.
+
+```{r two-way ANOVA tables,echo=FALSE, message=FALSE}
+table_ANOVA_wtsp <- feather_clean %>%
+  gtsummary::select(Age, P4Mass,P4Length, Wing, Tail) %>% 
+  tbl_summary(
+    by = Age, # Creates the columns by feather generation,
+    missing = "no",
+    # remove missing values (NAs). "ifany" will include a missing values row in table.
+    digits = all_continuous() ~ 1, 
+    #number of displayed digits for continuous variables, one significant digit
+    label = list(
+      P4Mass ~ "P4 Mass (mg)",
+      P4Length ~ "P4 Length (mm)",
+      Wing ~ "Wing Chord (mm)",
+      Tail ~ "Tail Length (mm)"
+    ), # labels including units, making it look pretty 
+    statistic = list(all_continuous() ~ "{mean} ({sd})", #can use any character for parentheses
+                     all_categorical() ~ "{n}") #count obs. for categorical variables
+  ) %>% 
+  add_p(pvalue_fun = ~ style_pvalue(.x, digits = 2)) %>% #number of digits displayed for p-values
+  modify_caption("Table 3. Mean (sd) values for morphological characteristics of White-throated Sparrows of different ages. An ANOVA was used to generate the P-value for each characteristic") %>% # Adding a table header
+  modify_header(
+    update = list(
+      label ~ '',
+      stat_1 ~ '**AHY**', #is markdown **bold** formatting, markdown is default formatting for this
+      stat_2 ~ '**ASY**', # **Bold**, *italics*, may also be able to use underscores 
+stat_3 ~ '**HY**',
+stat_4 ~ '**SY**',
+      p.value ~ '**P-value**')
+  ) %>%
+  modify_footnote(everything() ~ NA)  # this is how you remove the stuff that pops up at the bottom, sub/superscript
+  
+table_ANOVA_wtsp
+ 
+```
+```{r}
+feather_boxplot <- ggplot(feather_clean, aes(x = Age, y = Wing, fill = Age)) +
+  geom_boxplot() +
+  theme_bw() +
+  xlab("Age")+
+  ylab("Wing Chord Length (mm)")
+
+ggsave("output/wing_box.png")
+
+```
+
+# ANCOVA
+
+For the ANOVA we will group by age categories for the purpose of this assignment. These age categories may not represent an ecologically significant effect as HY birds become classified as SY birds after January 1.
+
